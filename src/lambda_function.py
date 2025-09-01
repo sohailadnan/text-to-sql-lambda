@@ -6,6 +6,8 @@ from typing import Dict, Any
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
 import openai
+import sqlparse
+from sql_metadata import Parser
 
 # Configure logging
 logger = logging.getLogger()
@@ -52,20 +54,40 @@ def get_llm_response(prompt: str) -> str:
 
 def validate_sql(sql: str) -> bool:
     """
-    Basic SQL validation and security checks
+    Validate the SQL query to ensure it is a single, read-only SELECT statement.
     """
-    # Convert to lowercase for checks
-    sql_lower = sql.lower()
-    
-    # List of forbidden SQL commands
-    forbidden = ['drop', 'truncate', 'delete', 'update', 'insert', 'create', 'alter']
-    
-    # Check for forbidden commands
-    for word in forbidden:
-        if word in sql_lower:
+    try:
+        # Use sqlparse to parse the SQL
+        parsed = sqlparse.parse(sql)
+
+        # Filter out empty statements
+        statements = [stmt for stmt in parsed if stmt.token_first(skip_ws=True)]
+
+        if len(statements) > 1:
+            logger.warning(f"Multiple SQL statements detected: {sql}")
             return False
             
-    return True
+        if not statements:
+            return False # No statements found
+
+        # Check the type of the single statement
+        statement_type = statements[0].get_type()
+        if statement_type != 'SELECT':
+            logger.warning(f"Disallowed statement type '{statement_type}': {sql}")
+            return False
+
+        # As an additional security measure, check for forbidden keywords in the raw query string.
+        # This helps prevent injection attempts even within comments or strings.
+        sql_lower = sql.lower()
+        forbidden = ['drop', 'truncate', 'delete', 'update', 'insert', 'create', 'alter']
+        if any(word in sql_lower for word in forbidden):
+            logger.warning(f"Forbidden keyword found in query: {sql}")
+            return False
+
+        return True
+    except Exception as e:
+        logger.error(f"Error during SQL validation: {str(e)}")
+        return False
 
 def execute_sql(sql: str) -> Dict[str, Any]:
     """
@@ -81,7 +103,7 @@ def execute_sql(sql: str) -> Dict[str, Any]:
             return {"success": True, "data": []}
     except Exception as e:
         logger.error(f"Database error: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "An error occurred while querying the database."}
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -126,7 +148,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {
                 'statusCode': 500,
                 'body': json.dumps({
-                    'error': result['error']
+                    'error': "An internal server error occurred while executing the query."
                 })
             }
             
@@ -144,6 +166,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return {
             'statusCode': 500,
             'body': json.dumps({
-                'error': str(e)
+                'error': "An internal server error occurred."
             })
         }
