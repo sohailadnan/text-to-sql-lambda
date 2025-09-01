@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Text to SQL API
+  description: API for converting natural language to SQL queries using LLM
+  version: 1.0.0
+
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com/{stage}
+    variables:
+      apiId:
+        description: API Gateway ID
+        default: your-api-id
+      region:
+        description: AWS Region
+        default: us-east-1
+      stage:
+        description: API Stage
+        default: prod
+
+paths:
+  /query:
+    post:
+      summary: Convert text to SQL and execute query
+      description: Takes a natural language query, converts it to SQL using LLM, and executes it against the database
+      operationId: textToSql
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Natural language query to convert to SQL
+                  example: "Show me all orders from last month"
+      responses:
+        '200':
+          description: Successful query execution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sql:
+                    type: string
+                    description: Generated SQL query
+                  data:
+                    type: array
+                    items:
+                      type: object
+                    description: Query results
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      name: x-api-key
+      in: header
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message

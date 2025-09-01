@@ -1,0 +1,4 @@
+{
+    "SubnetIds": ["subnet-xxxxx", "subnet-yyyyy"],
+    "SecurityGroupIds": ["sg-zzzzz"]
+}
